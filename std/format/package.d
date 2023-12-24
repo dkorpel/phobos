@@ -685,50 +685,10 @@ class FormatException : Exception
 
 package alias enforceFmt = enforce!FormatException;
 
-// @@@DEPRECATED_[2.107.0]@@@
-deprecated("formatElement was accidentally made public and will be removed in 2.107.0")
-void formatElement(Writer, T, Char)(auto ref Writer w, T val, scope const ref FormatSpec!Char f)
-if (is(StringTypeOf!T) && !hasToString!(T, Char) && !is(T == enum))
-{
-    import std.format.internal.write : fe = formatElement;
-
-    fe(w, val, f);
-}
-
-// @@@DEPRECATED_[2.107.0]@@@
-deprecated("formatElement was accidentally made public and will be removed in 2.107.0")
-void formatElement(Writer, T, Char)(auto ref Writer w, T val, scope const ref FormatSpec!Char f)
-if (is(CharTypeOf!T) && !is(T == enum))
-{
-    import std.format.internal.write : fe = formatElement;
-
-    fe(w, val, f);
-}
-
-// @@@DEPRECATED_[2.107.0]@@@
-deprecated("formatElement was accidentally made public and will be removed in 2.107.0")
-void formatElement(Writer, T, Char)(auto ref Writer w, auto ref T val, scope const ref FormatSpec!Char f)
-if ((!is(StringTypeOf!T) || hasToString!(T, Char)) && !is(CharTypeOf!T) || is(T == enum))
-{
-    import std.format.internal.write : fe = formatElement;
-
-    fe(w, val, f);
-}
-
 // Like NullSink, but toString() isn't even called at all. Used to test the format string.
 package struct NoOpSink
 {
     void put(E)(scope const E) pure @safe @nogc nothrow {}
-}
-
-// @@@DEPRECATED_[2.107.0]@@@
-deprecated("unformatElement was accidentally made public and will be removed in 2.107.0")
-T unformatElement(T, Range, Char)(ref Range input, scope const ref FormatSpec!Char spec)
-if (isInputRange!Range)
-{
-    import std.format.internal.read : ue = unformatElement;
-
-    return ue(input, spec);
 }
 
 // Used to check format strings are compatible with argument types

@@ -76,24 +76,6 @@ if (is(Unqual!Char == Char))
     bool dynamicSeparatorChar = false;
 
     /**
-       Set to `DYNAMIC` when the separator character is supplied at runtime.
-
-       _Default: `UNSPECIFIED`.
-
-       $(RED Warning:
-           `separatorCharPos` is deprecated. It will be removed in 2.107.0.
-           Please use `dynamicSeparatorChar` instead.)
-     */
-    // @@@DEPRECATED_[2.107.0]@@@
-    deprecated("separatorCharPos will be removed in 2.107.0. Please use dynamicSeparatorChar instead.")
-    int separatorCharPos() { return dynamicSeparatorChar ? DYNAMIC : UNSPECIFIED; }
-
-    /// ditto
-    // @@@DEPRECATED_[2.107.0]@@@
-    deprecated("separatorCharPos will be removed in 2.107.0. Please use dynamicSeparatorChar instead.")
-    void separatorCharPos(int value) { dynamicSeparatorChar = value == DYNAMIC; }
-
-    /**
        Character to use as separator.
 
        _Default: `','`.
@@ -907,15 +889,6 @@ FormatSpec!Char singleSpec(Char)(Char[] fmt)
     assertThrown!FormatException(singleSpec("Test%2.3e"));
     assertThrown!FormatException(singleSpec("%2.3eTest"));
     assertThrown!FormatException(singleSpec("%%"));
-}
-
-// @@@DEPRECATED_[2.107.0]@@@
-deprecated("enforceValidFormatSpec was accidentally made public and will be removed in 2.107.0")
-void enforceValidFormatSpec(T, Char)(scope const ref FormatSpec!Char f)
-{
-    import std.format.internal.write : evfs = enforceValidFormatSpec;
-
-    evfs!T(f);
 }
 
 @safe unittest
