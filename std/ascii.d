@@ -178,6 +178,8 @@ version (Windows)
     immutable newline = "\r\n";
 else version (Posix)
     immutable newline = "\n";
+else version (WebAssembly)
+    immutable newline = "\n";
 else
     static assert(0, "Unsupported OS");
 

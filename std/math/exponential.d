@@ -40,6 +40,7 @@ static import core.stdc.math;
 version (DigitalMars)
 {
     version (OSX) { }             // macOS 13 (M1) has issues emulating instruction
+    else version (WebAssembly) { } // wasm has no x87 fyl2x/fyl2xp1 opcodes
     else version = INLINE_YL2X;   // x87 has opcodes for these
 }
 
