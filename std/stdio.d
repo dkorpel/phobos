@@ -139,6 +139,10 @@ else version (CRuntime_UClibc)
 {
     version = GENERIC_IO;
 }
+else version (CRuntime_WASI)
+{
+    version = GENERIC_IO;
+}
 else version (OSX)
 {
     version = GENERIC_IO;
@@ -246,7 +250,12 @@ else version (GENERIC_IO)
         pragma(mangle, core.stdc.wchar_.fgetwc.mangleof) int _FGETWC(_iobuf* fp);
     }
 
-    version (Posix)
+    version (CRuntime_WASI)
+    {
+        private void _FLOCK(shared(_iobuf)*) {} // single-threaded: file locking is a no-op
+        private void _FUNLOCK(shared(_iobuf)*) {}
+    }
+    else version (Posix)
     {
         private alias _FLOCK = core.sys.posix.stdio.flockfile;
         private alias _FUNLOCK = core.sys.posix.stdio.funlockfile;
@@ -747,6 +756,12 @@ Params:
             auto fp = fdopen(fd, modez);
             errnoEnforce(fp);
         }
+        else version (CRuntime_WASI)
+        {
+            static extern (C) FILE* fdopen(int, const(char)*) @nogc nothrow;
+            auto fp = fdopen(fd, modez);
+            errnoEnforce(fp);
+        }
         else
             static assert(0, "no fdopen() available");
 
@@ -982,6 +997,12 @@ Throws: `Exception` if the file is not opened or if the OS call fails.
             import std.exception : errnoEnforce;
             errnoEnforce(fcntl(fileno, F_FULLFSYNC, 0) != -1, "fcntl failed");
         }
+        else version (CRuntime_WASI)
+        {
+            static extern (C) int fsync(int) @nogc nothrow;
+            import std.exception : errnoEnforce;
+            errnoEnforce(fsync(fileno) == 0, "fsync failed");
+        }
         else
         {
             import core.sys.posix.unistd : fsync;
@@ -1187,6 +1208,12 @@ Throws: `Exception` if the file is not opened.
                 alias off_t = int;
             }
         }
+        else version (CRuntime_WASI)
+        {
+            alias off_t = long;
+            static extern (C) int fseeko(FILE*, off_t, int) @nogc nothrow;
+            alias fseekFun = fseeko;
+        }
         else version (Posix)
         {
             import core.sys.posix.stdio : fseeko, off_t;
@@ -1243,6 +1270,11 @@ Throws: `Exception` if the file is not opened.
                 immutable result = _ftelli64(cast(FILE*) _p.handle);
             else
                 immutable result = ftell(cast(FILE*) _p.handle);
+        }
+        else version (CRuntime_WASI)
+        {
+            static extern (C) long ftello(FILE*) @nogc nothrow;
+            immutable result = ftello(cast(FILE*) _p.handle);
         }
         else version (Posix)
         {
@@ -1394,6 +1426,9 @@ $(UL
             wenforce(lockImpl!LockFileEx(start, length, type),
                     "Could not set lock for file `"~_name~"'");
         }
+        else version (CRuntime_WASI)
+        {
+        }
         else
             static assert(false);
     }
@@ -1439,6 +1474,10 @@ specified file segment was already locked.
             wenforce(res, "Could not set lock for file `"~_name~"'");
             return true;
         }
+        else version (CRuntime_WASI)
+        {
+            return true;
+        }
         else
             static assert(false);
     }
@@ -1464,6 +1503,9 @@ Removes the lock over the specified file segment.
             import core.sys.windows.winbase : UnlockFileEx;
             wenforce(lockImpl!UnlockFileEx(start, length),
                 "Could not remove lock for file `"~_name~"'");
+        }
+        else version (CRuntime_WASI)
+        {
         }
         else
             static assert(false);
@@ -5811,7 +5853,7 @@ private size_t readlnImpl(FILE* fps, ref char[] buf, dchar terminator, File.Orie
                     StdioException();
                 return buf.length;
             }
-            else version (Posix)
+            else
             {
                 import std.utf : encode;
                 buf.length = 0;
@@ -5827,10 +5869,6 @@ private size_t readlnImpl(FILE* fps, ref char[] buf, dchar terminator, File.Orie
                 if (ferror(fps))
                     StdioException();
                 return buf.length;
-            }
-            else
-            {
-                static assert(0);
             }
         }
 

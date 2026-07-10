@@ -96,7 +96,21 @@ $(TR $(TD Other) $(TD
 module std.path;
 
 
-import std.file : getcwd;
+version (WASI)
+{
+    // wasi-libc provides getcwd; declare it directly so std.path stays
+    // independent of std.file (which lacks a WASI port).
+    private string getcwd() @trusted
+    {
+        import core.stdc.string : strlen;
+        static extern (C) char* getcwd(char* buf, size_t size) @nogc nothrow;
+        char[4096] buf = void;
+        auto p = getcwd(buf.ptr, buf.length);
+        return p is null ? "/" : p[0 .. strlen(p)].idup;
+    }
+}
+else
+    import std.file : getcwd;
 static import std.meta;
 import std.range;
 import std.traits;
@@ -109,6 +123,9 @@ else version (TVOS)
     version = Darwin;
 else version (WatchOS)
     version = Darwin;
+
+version (Posix) version = StdPathPosix;
+else version (WASI) version = StdPathPosix;
 
 version (StdUnittest)
 {
@@ -130,7 +147,7 @@ private:
 /** String used to separate directory names in a path.  Under
     POSIX this is a slash, under Windows a backslash.
 */
-version (Posix)          enum string dirSeparator = "/";
+version (StdPathPosix)          enum string dirSeparator = "/";
 else version (Windows)   enum string dirSeparator = "\\";
 else static assert(0, "unsupported platform");
 
@@ -140,7 +157,7 @@ else static assert(0, "unsupported platform");
 /** Path separator string.  A colon under POSIX, a semicolon
     under Windows.
 */
-version (Posix)          enum string pathSeparator = ":";
+version (StdPathPosix)          enum string pathSeparator = ":";
 else version (Windows)   enum string pathSeparator = ";";
 else static assert(0, "unsupported platform");
 
@@ -193,7 +210,7 @@ version (Windows) private bool isSeparator(dchar c)  @safe pure nothrow @nogc
 {
     return isDirSeparator(c) || isDriveSeparator(c);
 }
-version (Posix) private alias isSeparator = isDirSeparator;
+version (StdPathPosix) private alias isSeparator = isDirSeparator;
 
 
 /*  Helper function that determines the position of the last
@@ -360,7 +377,7 @@ enum CaseSensitive : bool
     assert(baseName!(CaseSensitive.no)("dir/file.EXT", ".ext") == "file");
     assert(baseName!(CaseSensitive.yes)("dir/file.EXT", ".ext") != "file");
 
-    version (Posix)
+    version (StdPathPosix)
         assert(relativePath!(CaseSensitive.no)("/FOO/bar", "/foo/baz") == "../bar");
     else
         assert(relativePath!(CaseSensitive.no)(`c:\FOO\bar`, `c:\foo\baz`) == `..\bar`);
@@ -368,7 +385,7 @@ enum CaseSensitive : bool
 
 version (Windows)     private enum osDefaultCaseSensitivity = false;
 else version (Darwin) private enum osDefaultCaseSensitivity = false;
-else version (Posix)  private enum osDefaultCaseSensitivity = true;
+else version (StdPathPosix)  private enum osDefaultCaseSensitivity = true;
 else static assert(0);
 
 /**
@@ -779,7 +796,7 @@ private auto _rootName(R)(R path)
     if (path.empty)
         goto Lnull;
 
-    version (Posix)
+    version (StdPathPosix)
     {
         if (isDirSeparator(path[0])) return path[0 .. 1];
     }
@@ -836,7 +853,7 @@ if (isSomeChar!C)
 @safe unittest
 {
     import std.range : empty;
-    version (Posix)  assert(driveName("c:/foo").empty);
+    version (StdPathPosix)  assert(driveName("c:/foo").empty);
     version (Windows)
     {
         assert(driveName(`dir\file`).empty);
@@ -855,7 +872,7 @@ if (isSomeChar!C)
 {
     assert(testAliasedString!driveName("d:/file"));
 
-    version (Posix)
+    version (StdPathPosix)
         immutable result = "";
     else version (Windows)
         immutable result = "d:";
@@ -872,7 +889,7 @@ if (isSomeChar!C)
     import std.array;
     import std.utf : byChar;
 
-    version (Posix)  assert(driveName("c:/foo".byChar).empty);
+    version (StdPathPosix)  assert(driveName("c:/foo".byChar).empty);
     version (Windows)
     {
         assert(driveName(`dir\file`.byChar).empty);
@@ -937,7 +954,7 @@ if (isSomeChar!C)
 {
     assert(testAliasedString!stripDrive("d:/dir/file"));
 
-    version (Posix)
+    version (StdPathPosix)
         immutable result = "d:/dir/file";
     else version (Windows)
         immutable result = "/dir/file";
@@ -962,7 +979,7 @@ if (isSomeChar!C)
         foreach (i, c; `\dir\file`)
             assert(s[i] == c);
     }
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(stripDrive(`d:\dir\file`) == `d:\dir\file`);
 
@@ -1499,7 +1516,7 @@ if (isSomeChar!C)
 ///
 @safe unittest
 {
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(buildPath("foo", "bar", "baz") == "foo/bar/baz");
         assert(buildPath("/foo/", "bar/baz")  == "/foo/bar/baz");
@@ -1522,7 +1539,7 @@ if (isSomeChar!C)
     // ir() wraps an array in a plain (i.e. non-forward) input range, so that
     // we can test both code paths
     InputRange!(C[]) ir(C)(C[][] p...) { return inputRangeObject(p.dup); }
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(buildPath("foo") == "foo");
         assert(buildPath("/foo/") == "/foo/");
@@ -1599,7 +1616,7 @@ if (isSomeChar!C)
 {
     // Test for https://issues.dlang.org/show_bug.cgi?id=7397
     string[] ary = ["a", "b"];
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(buildPath(ary) == "a/b");
     }
@@ -1652,7 +1669,7 @@ if ((isRandomAccessRange!R1 && hasSlicing!R1 && hasLength!R1 && isSomeChar!(Elem
         {
             if (isRooted(r2))
             {
-                version (Posix)
+                version (StdPathPosix)
                 {
                     pos = 0;
                 }
@@ -1684,7 +1701,7 @@ if ((isRandomAccessRange!R1 && hasSlicing!R1 && hasLength!R1 && isSomeChar!(Elem
 @safe unittest
 {
     import std.array;
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(chainPath("foo", "bar", "baz").array == "foo/bar/baz");
         assert(chainPath("/foo/", "bar/baz").array  == "/foo/bar/baz");
@@ -1701,7 +1718,7 @@ if ((isRandomAccessRange!R1 && hasSlicing!R1 && hasLength!R1 && isSomeChar!(Elem
     }
 
     import std.utf : byChar;
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(chainPath("foo", "bar", "baz").array == "foo/bar/baz");
         assert(chainPath("/foo/".byChar, "bar/baz").array  == "/foo/bar/baz");
@@ -1779,7 +1796,7 @@ if (isSomeChar!C)
 {
     assert(buildNormalizedPath("foo", "..") == ".");
 
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(buildNormalizedPath("/foo/./bar/..//baz/") == "/foo/baz");
         assert(buildNormalizedPath("../foo/.") == "../foo");
@@ -1814,7 +1831,7 @@ if (isSomeChar!C)
     assert(buildNormalizedPath(null, "") == "");
     assert(buildNormalizedPath!(char)(null, null) == "");
 
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(buildNormalizedPath("/", "foo", "bar") == "/foo/bar");
         assert(buildNormalizedPath("foo", "bar", "baz") == "foo/bar/baz");
@@ -1879,7 +1896,7 @@ if (isSomeChar!C)
 {
     // Test for https://issues.dlang.org/show_bug.cgi?id=7397
     string[] ary = ["a", "b"];
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(buildNormalizedPath(ary) == "a/b");
     }
@@ -2058,7 +2075,7 @@ if (isSomeChar!(ElementEncodingType!R) &&
     import std.array;
     assert(asNormalizedPath("foo/..").array == ".");
 
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(asNormalizedPath("/foo/./bar/..//baz/").array == "/foo/baz");
         assert(asNormalizedPath("../foo/.").array == "../foo");
@@ -2103,7 +2120,7 @@ if (isConvertibleToString!R)
     save.popFront();
     assert(save.front == 'o');
 
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(asNormalizedPath("/foo/bar").array == "/foo/bar");
         assert(asNormalizedPath("foo/bar/baz").array == "foo/bar/baz");
@@ -2180,7 +2197,7 @@ if (isConvertibleToString!R)
 {
     import std.array;
 
-    version (Posix)
+    version (StdPathPosix)
     {
         // Trivial
         assert(asNormalizedPath("").empty);
@@ -2411,7 +2428,7 @@ if ((isRandomAccessRange!R && hasSlicing!R ||
                     popFront();
                 }
             }
-            else version (Posix)
+            else version (StdPathPosix)
             {
                 if (_path.length >= 1 && isDirSeparator(_path[0]))
                 {
@@ -2466,7 +2483,7 @@ if ((isRandomAccessRange!R && hasSlicing!R ||
     assert(equal(pathSplitter("/foo/bar"), ["/", "foo", "bar"]));
     assert(equal(pathSplitter("foo/../bar//./"), ["foo", "..", "bar", "."]));
 
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(equal(pathSplitter("//foo/bar"), ["/", "foo", "bar"]));
     }
@@ -2528,7 +2545,7 @@ if (isConvertibleToString!R)
     assert(equal2(ps2, ["foo", "bar", "baz"]));
 
     // Platform specific
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(equal2(pathSplitter("//foo/bar"w.dup), ["/"w, "foo"w, "bar"w]));
     }
@@ -2578,14 +2595,14 @@ if (isRandomAccessRange!R && isSomeChar!(ElementType!R) ||
     is(StringTypeOf!R))
 {
     if (path.length >= 1 && isDirSeparator(path[0])) return true;
-    version (Posix)         return false;
+    version (StdPathPosix)         return false;
     else version (Windows)  return isAbsolute!(BaseOf!R)(path);
 }
 
 ///
 @safe unittest
 {
-    version (Posix)
+    version (StdPathPosix)
     {
         assert( isRooted("/"));
         assert( isRooted("/foo"));
@@ -2638,7 +2655,7 @@ if (isRandomAccessRange!R && isSomeChar!(ElementType!R) ||
     On POSIX, an absolute path starts at the root directory.
     (In fact, `_isAbsolute` is just an alias for $(LREF isRooted).)
     ---
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(isAbsolute("/"));
         assert(isAbsolute("/foo"));
@@ -2678,7 +2695,7 @@ else version (Windows)
         return isDriveRoot!(BaseOf!R)(path) || isUNC!(BaseOf!R)(path);
     }
 }
-else version (Posix)
+else version (StdPathPosix)
 {
     alias isAbsolute = isRooted;
 }
@@ -2690,7 +2707,7 @@ else version (Posix)
     assert(!isAbsolute("../foo"w));
     static assert(!isAbsolute("foo"));
 
-    version (Posix)
+    version (StdPathPosix)
     {
     assert(isAbsolute("/"d));
     assert(isAbsolute("/foo".dup));
@@ -2764,7 +2781,7 @@ string absolutePath(return scope const string path, lazy string base = getcwd())
 ///
 @safe unittest
 {
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(absolutePath("some/file", "/foo/bar")  == "/foo/bar/some/file");
         assert(absolutePath("../file", "/foo/bar")    == "/foo/bar/../file");
@@ -2783,7 +2800,7 @@ string absolutePath(return scope const string path, lazy string base = getcwd())
 
 @safe unittest
 {
-    version (Posix)
+    version (StdPathPosix)
     {
         static assert(absolutePath("some/file", "/foo/bar") == "/foo/bar/some/file");
     }
@@ -2804,7 +2821,7 @@ string absolutePath(return scope const string path, lazy string base = getcwd())
         return absolutePath(path, base);
     }
 
-    version (Posix)
+    version (StdPathPosix)
         assert(testAbsPath("some/file", "/foo/bar")  == "/foo/bar/some/file");
     version (Windows)
         assert(testAbsPath(`some\file`, `c:\foo\bar`)    == `c:\foo\bar\some\file`);
@@ -2837,7 +2854,7 @@ if ((isRandomAccessRange!R && isSomeChar!(ElementType!R) ||
     isNarrowString!R) &&
     !isConvertibleToString!R)
 {
-    import std.file : getcwd;
+    version (WASI) {} else import std.file : getcwd;
     string base = null;
     if (!path.empty && !isAbsolute(path))
         base = getcwd();
@@ -2849,7 +2866,7 @@ if ((isRandomAccessRange!R && isSomeChar!(ElementType!R) ||
 {
     import std.array;
     assert(asAbsolutePath(cast(string) null).array == "");
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(asAbsolutePath("/foo").array == "/foo");
     }
@@ -2929,7 +2946,7 @@ string relativePath(CaseSensitive cs = CaseSensitive.osDefault)
 {
     assert(relativePath("foo") == "foo");
 
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(relativePath("foo", "/bar") == "foo");
         assert(relativePath("/foo/bar", "/foo/bar") == ".");
@@ -2952,7 +2969,7 @@ string relativePath(CaseSensitive cs = CaseSensitive.osDefault)
 {
     import std.exception;
     assert(relativePath("foo") == "foo");
-    version (Posix)
+    version (StdPathPosix)
     {
         relativePath("/foo");
         assert(relativePath("/foo/bar", "/foo/baz") == "../bar");
@@ -3059,7 +3076,7 @@ if ((isNarrowString!R1 ||
 @safe unittest
 {
     import std.array;
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(asRelativePath("foo", "/bar").array == "foo");
         assert(asRelativePath("/foo/bar", "/foo/bar").array == ".");
@@ -3084,7 +3101,7 @@ if ((isNarrowString!R1 ||
 
 @safe unittest
 {
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(isBidirectionalRange!(typeof(asRelativePath("foo/bar/baz", "/foo/woo/wee"))));
     }
@@ -3107,7 +3124,7 @@ if (isConvertibleToString!R1 || isConvertibleToString!R2)
 @safe unittest
 {
     import std.array;
-    version (Posix)
+    version (StdPathPosix)
         assert(asRelativePath(TestAliasedString("foo"), TestAliasedString("/bar")).array == "foo");
     else version (Windows)
         assert(asRelativePath(TestAliasedString("foo"), TestAliasedString(`c:\bar`)).array == "foo");
@@ -3121,7 +3138,7 @@ if (isConvertibleToString!R1 || isConvertibleToString!R2)
 @safe unittest
 {
     import std.array, std.utf : bCU=byCodeUnit;
-    version (Posix)
+    version (StdPathPosix)
     {
         assert(asRelativePath("/foo/bar/baz".bCU, "/foo/bar".bCU).array == "baz");
         assert(asRelativePath("/foo/bar/baz"w.bCU, "/foo/bar"w.bCU).array == "baz"w);
@@ -3204,7 +3221,7 @@ int filenameCharCmp(CaseSensitive cs = CaseSensitive.osDefault)(dchar a, dchar b
     assert(filenameCharCmp!(CaseSensitive.no)('A', 'b') < 0);
     assert(filenameCharCmp!(CaseSensitive.no)('b', 'A') > 0);
 
-    version (Posix)   assert(filenameCharCmp('\\', '/') != 0);
+    version (StdPathPosix)   assert(filenameCharCmp('\\', '/') != 0);
     version (Windows) assert(filenameCharCmp('\\', '/') == 0);
 }
 
@@ -3323,7 +3340,7 @@ if (isConvertibleToString!Range1 || isConvertibleToString!Range2)
     assert(filenameCmp!(CaseSensitive.no)("Abc", "abD") < 0);
     assert(filenameCmp!(CaseSensitive.no)("abc", "AbB") > 0);
 
-    version (Posix)   assert(filenameCmp(`abc\def`, `abc/def`) != 0);
+    version (StdPathPosix)   assert(filenameCmp(`abc\def`, `abc/def`) != 0);
     version (Windows) assert(filenameCmp(`abc\def`, `abc/def`) == 0);
 }
 
@@ -3680,7 +3697,7 @@ if ((isRandomAccessRange!Range && hasLength!Range && hasSlicing!Range && isSomeC
                     break;
             }
         }
-        else version (Posix)
+        else version (StdPathPosix)
         {
             if (c == 0 || c == '/') return false;
         }
@@ -3724,7 +3741,7 @@ unittest
     auto invalid = ["", "foo\0bar", "foo/bar"];
     auto pfdep = [`foo\bar`, "*.txt"];
     version (Windows) invalid ~= pfdep;
-    else version (Posix) valid ~= pfdep;
+    else version (StdPathPosix) valid ~= pfdep;
     else static assert(0);
 
     import std.meta : AliasSeq;
@@ -3868,7 +3885,7 @@ if ((isRandomAccessRange!Range && hasLength!Range && hasSlicing!Range && isSomeC
             remainder = path;
         }
     }
-    else version (Posix)
+    else version (StdPathPosix)
     {
         remainder = path;
     }
@@ -3985,7 +4002,7 @@ if (isConvertibleToString!Range)
 */
 string expandTilde(return scope const string inputPath) @safe nothrow
 {
-    version (Posix)
+    version (StdPathPosix)
     {
         import core.exception : onOutOfMemoryError;
         import core.stdc.errno : errno, EBADF, ENOENT, EPERM, ERANGE, ESRCH;
@@ -4054,11 +4071,12 @@ string expandTilde(return scope const string inputPath) @safe nothrow
         static string expandFromDatabase(string path) @safe nothrow
         {
             // bionic doesn't really support this, as getpwnam_r
-            // isn't provided and getpwnam is basically just a stub
+            // isn't provided and getpwnam is basically just a stub;
+            // WASI likewise has no user database.
             version (CRuntime_Bionic)
-            {
                 return path;
-            }
+            else version (WASI)
+                return path;
             else
             {
                 import core.sys.posix.pwd : passwd, getpwnam_r;
@@ -4168,7 +4186,7 @@ string expandTilde(return scope const string inputPath) @safe nothrow
 ///
 @safe unittest
 {
-    version (Posix)
+    version (StdPathPosix)
     {
         import std.process : environment;
 
@@ -4183,7 +4201,7 @@ string expandTilde(return scope const string inputPath) @safe nothrow
 
 @safe unittest
 {
-    version (Posix)
+    version (StdPathPosix)
     {
         static if (__traits(compiles, { import std.process : executeShell; }))
             import std.process : executeShell;
@@ -4235,7 +4253,7 @@ string expandTilde(return scope const string inputPath) @safe nothrow
 
 @safe unittest
 {
-    version (Posix)
+    version (StdPathPosix)
     {
         import std.process : environment;
 
