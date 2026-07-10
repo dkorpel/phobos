@@ -480,7 +480,8 @@ if (isFloatingPoint!T)
     /** Returns a complex number instance that correponds in size and in ABI
         to the associated C compiler's `_Complex` type.
      */
-    auto toNative()
+    version (WebAssembly) {} // no C `_Complex` ABI on the WebAssembly target
+    else auto toNative()
     {
         import core.stdc.config : c_complex_float, c_complex_double, c_complex_real;
         static if (is(T == float))
@@ -1958,7 +1959,8 @@ Complex!T pow(T)(const T x, Complex!T n) @trusted pure nothrow @nogc
     }}
 }
 
-@safe pure nothrow @nogc unittest
+version (WebAssembly) {} // toNative is unavailable on the WebAssembly target
+else @safe pure nothrow @nogc unittest
 {
     import std.meta : AliasSeq;
     static foreach (T; AliasSeq!(float, double, real))
