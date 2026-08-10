@@ -386,6 +386,34 @@ $(ROOT_OF_THEM_ALL)/osx/release/libphobos2.a:
 		-create -output $@
 endif
 
+################### WASM cross-target #########################
+# Cross-compile phobos for wasm32.  Independent of the host build
+# (OS/MODEL/BUILD) — wasm32-wasip1 is a single fixed target — so the output goes
+# to $(ROOT_OF_THEM_ALL)/wasm/release/wasm32, the layout the native build uses
+# for $(ROOT).  Like the native $(LIB), the archive also contains druntime.
+
+WASM_DMD      ?= $(DMD)
+WASM_ROOT     := $(ROOT_OF_THEM_ALL)/wasm/release/wasm32
+WASM_LIB      := $(WASM_ROOT)/libphobos2-wasm.a
+WASM_DRT_ROOT := $(DMD_DIR)/generated/wasm/release/wasm32
+WASM_DRUNTIME := $(WASM_DRT_ROOT)/libdruntime-wasm.a
+WASM_DFLAGS   := -conf= -I$(DRUNTIME_PATH)/import -mwasm32 -os=wasm -w \
+	-preview=dip1000 -preview=dtorfields -preview=fieldwise -O -release
+WASM_C_OBJ    := $(WASM_ROOT)/zlib.o
+
+# zlib is always compiled with ImportC: the host C compiler cannot target
+# wasm32 without a cross sysroot.
+$(WASM_C_OBJ): $(C_FILES) $(WASM_DRUNTIME)
+	@mkdir -p $(dir $@)
+	$(WASM_DMD) -c $(WASM_DFLAGS) $(addprefix -P=,-DHAVE_UNISTD_H -Ietc/c/zlib) -of$@ $(C_FILES)
+
+$(WASM_LIB): $(ALL_D_FILES) $(WASM_C_OBJ) $(WASM_DRUNTIME)
+	@mkdir -p $(dir $@)
+	$(WASM_DMD) $(WASM_DFLAGS) -lib -of$@ $(WASM_DRUNTIME) $(D_FILES) $(WASM_C_OBJ)
+
+.PHONY: wasm
+wasm: $(WASM_LIB)
+
 ################################################################################
 # Unittests
 ################################################################################
@@ -505,6 +533,10 @@ endif
 	cp -r std/* $(INSTALL_DIR)/src/phobos/std/
 	cp -r etc/* $(INSTALL_DIR)/src/phobos/etc/
 	cp LICENSE_1_0.txt $(INSTALL_DIR)/phobos-LICENSE.txt
+ifneq (,$(wildcard $(WASM_LIB)))
+	mkdir -p $(INSTALL_DIR)/$(OS)/libwasm32
+	cp $(WASM_LIB) $(WASM_DRT_ROOT)/libc.a $(WASM_DRT_ROOT)/libcrt1_betterc.a $(INSTALL_DIR)/$(OS)/libwasm32/
+endif
 
 ifeq (1,$(CUSTOM_DRUNTIME))
 # We consider a custom-set DRUNTIME a sign they build druntime themselves
@@ -514,6 +546,9 @@ else
 # avoid rebuilding phobos when $(DRUNTIME) didn't change.
 $(DRUNTIME): FORCE
 	$(MAKE) -C $(DRUNTIME_PATH) MODEL=$(MODEL) DMD=$(abspath $(DMD)) OS=$(OS) BUILD=$(BUILD)
+
+$(WASM_DRUNTIME): FORCE
+	$(MAKE) -C $(DRUNTIME_PATH) DMD=$(abspath $(DMD)) wasm
 
 ifeq (,$(findstring win,$(OS)))
 $(DRUNTIMESO): $(DRUNTIME)
