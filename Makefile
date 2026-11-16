@@ -37,7 +37,6 @@
 QUIET:=@
 
 DEBUGGER=gdb
-GIT_HOME=https://github.com/dlang
 DMD_DIR=../dmd
 
 include $(DMD_DIR)/compiler/src/osmodel.mak
@@ -96,7 +95,7 @@ ZIPFILE = phobos.zip
 ROOT_OF_THEM_ALL = generated
 ROOT = $(ROOT_OF_THEM_ALL)/$(OS)/$(BUILD)/$(MODEL)
 DUB=dub
-TOOLS_DIR=../tools
+TOOLS_DIR=$(DMD_DIR)/tools
 DSCANNER_HASH=dc907e4a24900cd20e365082c1232967b468be4d
 DSCANNER_DIR=$(ROOT_OF_THEM_ALL)/dscanner-$(DSCANNER_HASH)
 
@@ -555,23 +554,6 @@ html : $(DOC_OUTPUT_DIR)/. $(HTMLS)
 
 build-html:
 	${MAKE} -C $(DLANG_ORG_DIR) -f posix.mak phobos-prerelease
-
-################################################################################
-# Automatically create dlang/tools repository if non-existent
-################################################################################
-
-${TOOLS_DIR}:
-	git clone --depth=1 ${GIT_HOME}/$(@F) $@
-
-$(TOOLS_DIR)/checkwhitespace.d: | $(TOOLS_DIR)
-$(TOOLS_DIR)/tests_extractor.d: | $(TOOLS_DIR)
-
-#################### test for undesired white spaces ##########################
-CWS_TOCHECK = Makefile
-CWS_TOCHECK += $(ALL_D_FILES) index.dd
-
-checkwhitespace: $(LIB) $(TOOLS_DIR)/checkwhitespace.d
-	$(DMD) $(DFLAGS) $(NODEFAULTLIB) $(LIB) -run $(TOOLS_DIR)/checkwhitespace.d $(CWS_TOCHECK)
 
 #############################
 # Submission to Phobos are required to conform to the DStyle
